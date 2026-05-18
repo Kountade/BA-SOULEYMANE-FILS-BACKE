@@ -25,7 +25,12 @@ SECRET_KEY = "django-insecure-a(h4$k0137552$#s@j@-g$-)nsh&@l5g5_nl8_!+tsv8$cpco+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+
+ALLOWED_HOSTS = ["ba-souleymane-fils-backe.onrender.com",
+                 "localhost", "127.0.0.1"]
+CSRF_TRUSTED_ORIGINS = ['https://ba-souleymane-fils-backe.onrender.com',
+                        'https://ba-souleymane-fils-backe.onrender.com',]
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
@@ -55,8 +60,11 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
 ]
 
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173"
+    "https://ba-souleymane-fils-backe.onrender.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 AUTH_USER_MODEL = 'users.CustomUser'
 
