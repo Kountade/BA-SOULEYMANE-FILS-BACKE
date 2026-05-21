@@ -43,10 +43,12 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "users",
+    "produits_stocks",
     "knox",
     "rest_framework",
     "corsheaders",
     "django_rest_passwordreset",
+    
 ]
 
 MIDDLEWARE = [
