@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "users",
     "produits_stocks",
+    "achats_fournisseurs",
     "knox",
     "rest_framework",
     "corsheaders",
