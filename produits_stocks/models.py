@@ -4,6 +4,9 @@ from django.utils import timezone
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.utils import timezone
+from datetime import date, timedelta
+
 from users.models import CustomUser
 
 class Category(models.Model):
@@ -290,13 +293,13 @@ class Lot(models.Model):
     
     # Références
     product = models.ForeignKey(
-        Product, 
+        'Product', 
         on_delete=models.CASCADE, 
         related_name='lots',
         verbose_name="Produit"
     )
     warehouse = models.ForeignKey(
-        Warehouse, 
+        'Warehouse', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True,
@@ -317,7 +320,7 @@ class Lot(models.Model):
     
     # Unités
     unit = models.ForeignKey(
-        UnitMeasure,
+        'UnitMeasure',
         on_delete=models.SET_NULL,
         null=True,
         verbose_name="Unité"
@@ -325,7 +328,7 @@ class Lot(models.Model):
     
     # Dates
     manufacturing_date = models.DateField(null=True, blank=True, verbose_name="Date de fabrication")
-    expiry_date = models.DateField(verbose_name="Date d'expiration")
+    expiry_date = models.DateField(null=True, blank=True, verbose_name="Date d'expiration")  # CHANGÉ: allow null=True, blank=True
     reception_date = models.DateField(auto_now_add=True, verbose_name="Date de réception")
     last_used_date = models.DateField(null=True, blank=True, verbose_name="Dernière utilisation")
     blocked_date = models.DateField(null=True, blank=True, verbose_name="Date de blocage")
@@ -367,60 +370,95 @@ class Lot(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.product.name} - Lot {self.lot_number} (Exp: {self.expiry_date})"
+        expiry_info = f"Exp: {self.expiry_date}" if self.expiry_date else "Pas d'expiration"
+        return f"{self.product.name} - Lot {self.lot_number} ({expiry_info})"
 
     def save(self, *args, **kwargs):
+        """
+        Sauvegarde avec mise à jour automatique du statut
+        """
         today = date.today()
-        alert_date = today + timedelta(days=self.product.alert_days if self.product else 30)
         
-        if self.expiry_date < today:
-            self.status = 'expired'
-        elif self.expiry_date <= alert_date:
-            self.status = 'expiring'
+        # Récupérer les jours d'alerte du produit
+        alert_days = 30
+        if self.product and self.product.alert_days:
+            alert_days = self.product.alert_days
+        
+        # Mise à jour du statut UNIQUEMENT si une date d'expiration existe
+        if self.expiry_date:
+            alert_date = today + timedelta(days=alert_days)
+            
+            if self.expiry_date < today:
+                self.status = 'expired'
+            elif self.expiry_date <= alert_date:
+                self.status = 'expiring'
+            else:
+                self.status = 'good'
         else:
+            # Pas de date d'expiration, le lot est considéré comme bon
             self.status = 'good'
         
         super().save(*args, **kwargs)
         
+        # Mettre à jour le stock associé
         if self.warehouse:
-            stock, created = Stock.objects.get_or_create(
-                product=self.product,
-                warehouse=self.warehouse
-            )
-            stock.update_quantity()
+            try:
+                from .models import Stock  # Import différé pour éviter les circular imports
+                stock, created = Stock.objects.get_or_create(
+                    product=self.product,
+                    warehouse=self.warehouse
+                )
+                stock.update_quantity()
+            except Exception as e:
+                # Ignorer les erreurs d'import ou de création
+                pass
 
     @property
     def days_until_expiry(self):
-        delta = self.expiry_date - date.today()
-        return delta.days
+        """Jours restants avant expiration"""
+        if self.expiry_date:
+            delta = self.expiry_date - date.today()
+            return delta.days
+        return None  # Pas de date d'expiration
 
     @property
     def is_expired(self):
-        return self.expiry_date < date.today()
+        """Vérifie si le lot est expiré"""
+        if self.expiry_date:
+            return self.expiry_date < date.today()
+        return False
 
     @property
     def is_expiring_soon(self):
-        if self.product:
+        """Vérifie si le lot expire bientôt"""
+        if not self.expiry_date:
+            return False
+        
+        alert_days = 30
+        if self.product and self.product.alert_days:
             alert_days = self.product.alert_days
-        else:
-            alert_days = 30
+        
         return not self.is_expired and self.days_until_expiry <= alert_days
 
     @property
     def available_quantity(self):
+        """Quantité disponible (non réservée)"""
         return self.current_quantity - self.reserved_quantity
 
     @property
     def stock_value(self):
+        """Valeur du stock de ce lot"""
         return self.current_quantity * self.purchase_price
 
     @property
     def usage_rate(self):
+        """Taux d'utilisation (pourcentage)"""
         if self.initial_quantity > 0:
             return ((self.initial_quantity - self.current_quantity) / self.initial_quantity) * 100
         return 0
 
     def reserve(self, quantity):
+        """Réserve une quantité du lot"""
         if quantity <= self.available_quantity:
             self.reserved_quantity += quantity
             self.save()
@@ -428,10 +466,12 @@ class Lot(models.Model):
         return False
 
     def unreserve(self, quantity):
+        """Libère une réservation"""
         self.reserved_quantity = max(0, self.reserved_quantity - quantity)
         self.save()
 
     def consume(self, quantity):
+        """Consomme une quantité du lot (sortie définitive)"""
         if quantity <= self.available_quantity:
             self.current_quantity -= quantity
             self.reserved_quantity = max(0, self.reserved_quantity - quantity)
@@ -441,6 +481,7 @@ class Lot(models.Model):
         return False
 
     def block(self, reason=None):
+        """Bloque le lot"""
         self.is_blocked = True
         self.status = 'blocked'
         self.block_reason = reason or ''
@@ -448,11 +489,11 @@ class Lot(models.Model):
         self.save()
 
     def unblock(self):
+        """Débloque le lot"""
         self.is_blocked = False
         self.block_reason = ''
         self.blocked_date = None
         self.save()
-
 
 class Stock(models.Model):
     """

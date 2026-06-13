@@ -306,6 +306,13 @@ class Receipt(models.Model):
         return f"{self.receipt_number} - {self.purchase_order.po_number}"
 
 
+# apps/achats_fournisseurs/models.py
+
+# apps/achats_fournisseurs/models.py
+from django.db import models
+from django.db.models import Sum  # AJOUTER CET IMPORT
+
+
 class ReceiptLine(models.Model):
     """
     Ligne de réception
@@ -346,18 +353,25 @@ class ReceiptLine(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        
         # Mettre à jour la quantité reçue sur la ligne de commande
-        self.po_line.quantity_received = self.po_line.receipt_lines.aggregate(
-            total=models.Sum('quantity_received')
+        total_received = ReceiptLine.objects.filter(po_line=self.po_line).aggregate(
+            total=Sum('quantity_received')
         )['total'] or 0
+        self.po_line.quantity_received = total_received
         self.po_line.save()
         
         # Mettre à jour le statut de la commande
         po = self.receipt.purchase_order
-        if po.lines.filter(quantity_remaining__gt=0).exists():
+        total_ordered = po.lines.aggregate(total=Sum('quantity'))['total'] or 0
+        total_received_po = po.lines.aggregate(total=Sum('quantity_received'))['total'] or 0
+        
+        if total_received_po >= total_ordered:
+            po.status = 'received'
+        elif total_received_po > 0:
             po.status = 'partial'
         else:
-            po.status = 'received'
+            po.status = 'confirmed' if po.status != 'draft' else po.status
         po.save()
 
 
