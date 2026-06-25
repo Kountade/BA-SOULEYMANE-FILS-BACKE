@@ -26,8 +26,9 @@ class SupplierContactSerializer(serializers.ModelSerializer):
 class SupplierProductSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_code = serializers.CharField(source='product.code', read_only=True)
-    product_unit = serializers.CharField(source='product.unit.symbol', read_only=True)
-    
+    product_unit = serializers.CharField(
+        source='product.unit.symbol', read_only=True)
+
     class Meta:
         model = SupplierProduct
         fields = [
@@ -40,7 +41,7 @@ class SupplierProductSerializer(serializers.ModelSerializer):
 
 class SupplierListSerializer(serializers.ModelSerializer):
     total_purchases_display = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Supplier
         fields = [
@@ -49,7 +50,7 @@ class SupplierListSerializer(serializers.ModelSerializer):
             'total_purchases', 'total_purchases_display'
         ]
         read_only_fields = ['id', 'total_purchases', 'total_orders']
-    
+
     def get_total_purchases_display(self, obj):
         return f"{obj.total_purchases:,.0f} FCFA" if obj.total_purchases else "0 FCFA"
 
@@ -57,7 +58,7 @@ class SupplierListSerializer(serializers.ModelSerializer):
 class SupplierDetailSerializer(serializers.ModelSerializer):
     contacts = SupplierContactSerializer(many=True, read_only=True)
     products = SupplierProductSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = Supplier
         fields = [
@@ -69,7 +70,8 @@ class SupplierDetailSerializer(serializers.ModelSerializer):
             'is_active', 'is_preferred', 'notes', 'contacts', 'products',
             'created_at', 'updated_at', 'created_by'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'total_purchases', 'total_orders']
+        read_only_fields = ['id', 'created_at',
+                            'updated_at', 'total_purchases', 'total_orders']
 
 
 class SupplierWriteSerializer(serializers.ModelSerializer):
@@ -82,10 +84,11 @@ class SupplierWriteSerializer(serializers.ModelSerializer):
             'payment_terms', 'delivery_lead_time', 'minimum_order',
             'is_active', 'is_preferred', 'notes'
         ]
-    
+
     def validate_code(self, value):
         if Supplier.objects.exclude(id=self.instance.id if self.instance else None).filter(code=value).exists():
-            raise serializers.ValidationError("Ce code fournisseur existe déjà")
+            raise serializers.ValidationError(
+                "Ce code fournisseur existe déjà")
         return value
 
 
@@ -94,7 +97,7 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_code = serializers.CharField(source='product.code', read_only=True)
     quantity_remaining = serializers.ReadOnlyField()
-    
+
     class Meta:
         model = PurchaseOrderLine
         fields = [
@@ -108,24 +111,30 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
 class PurchaseOrderLineCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrderLine
-        fields = ['product', 'quantity', 'unit_price', 'discount', 'tax_rate', 'notes']
-    
+        fields = ['product', 'quantity', 'unit_price',
+                  'discount', 'tax_rate', 'notes']
+
     def validate_quantity(self, value):
         if value <= 0:
-            raise serializers.ValidationError("La quantité doit être supérieure à 0")
+            raise serializers.ValidationError(
+                "La quantité doit être supérieure à 0")
         return value
-    
+
     def validate_unit_price(self, value):
         if value <= 0:
-            raise serializers.ValidationError("Le prix unitaire doit être supérieur à 0")
+            raise serializers.ValidationError(
+                "Le prix unitaire doit être supérieur à 0")
         return value
 
 
 class PurchaseOrderListSerializer(serializers.ModelSerializer):
-    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
-    supplier_code = serializers.CharField(source='supplier.code', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+    supplier_name = serializers.CharField(
+        source='supplier.name', read_only=True)
+    supplier_code = serializers.CharField(
+        source='supplier.code', read_only=True)
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
+
     class Meta:
         model = PurchaseOrder
         fields = [
@@ -137,15 +146,22 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
 
 
 class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
-    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
-    supplier_code = serializers.CharField(source='supplier.code', read_only=True)
-    supplier_address = serializers.CharField(source='supplier.address', read_only=True)
-    supplier_phone = serializers.CharField(source='supplier.phone', read_only=True)
+    supplier_name = serializers.CharField(
+        source='supplier.name', read_only=True)
+    supplier_code = serializers.CharField(
+        source='supplier.code', read_only=True)
+    supplier_address = serializers.CharField(
+        source='supplier.address', read_only=True)
+    supplier_phone = serializers.CharField(
+        source='supplier.phone', read_only=True)
     lines = PurchaseOrderLineSerializer(many=True, read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
-    approved_by_name = serializers.CharField(source='approved_by.full_name', read_only=True)
-    
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
+    created_by_name = serializers.CharField(
+        source='created_by.full_name', read_only=True)
+    approved_by_name = serializers.CharField(
+        source='approved_by.full_name', read_only=True)
+
     class Meta:
         model = PurchaseOrder
         fields = [
@@ -163,7 +179,7 @@ class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
 
 class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
     lines = PurchaseOrderLineCreateSerializer(many=True)
-    
+
     class Meta:
         model = PurchaseOrder
         fields = [
@@ -171,16 +187,17 @@ class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
             'discount_type', 'discount_value', 'tax_rate', 'shipping_cost',
             'notes', 'internal_notes', 'shipping_address', 'lines'
         ]
-    
+
     def validate_expected_delivery_date(self, value):
         if value < date.today():
-            raise serializers.ValidationError("La date de livraison prévue ne peut pas être dans le passé")
+            raise serializers.ValidationError(
+                "La date de livraison prévue ne peut pas être dans le passé")
         return value
-    
+
     @transaction.atomic
     def create(self, validated_data):
         lines_data = validated_data.pop('lines')
-        
+
         last_po = PurchaseOrder.objects.order_by('-id').first()
         if last_po and last_po.po_number:
             try:
@@ -190,18 +207,18 @@ class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
         else:
             num = 1
         po_number = f"PO-{date.today().year}-{num:04d}"
-        
+
         purchase_order = PurchaseOrder.objects.create(
             po_number=po_number,
             **validated_data
         )
-        
+
         for line_data in lines_data:
             PurchaseOrderLine.objects.create(
                 purchase_order=purchase_order,
                 **line_data
             )
-        
+
         purchase_order.calculate_totals()
         return purchase_order
 
@@ -214,7 +231,7 @@ class PurchaseOrderUpdateSerializer(serializers.ModelSerializer):
             'discount_value', 'tax_rate', 'shipping_cost', 'notes',
             'internal_notes', 'shipping_address', 'tracking_number'
         ]
-    
+
     @transaction.atomic
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():
@@ -233,13 +250,14 @@ class PurchaseOrderApproveSerializer(serializers.Serializer):
 class ReceiptLineSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_code = serializers.CharField(source='product.code', read_only=True)
-    po_line_quantity = serializers.IntegerField(source='po_line.quantity', read_only=True)
-    
+    po_line_quantity = serializers.IntegerField(
+        source='po_line.quantity', read_only=True)
+
     class Meta:
         model = ReceiptLine
         fields = [
             'id', 'product', 'product_name', 'product_code', 'po_line',
-            'po_line_quantity',  # AJOUTER CE CHAMP ICI
+            'po_line_quantity',
             'quantity_ordered', 'quantity_received', 'quantity_damaged',
             'lot', 'lot_number', 'expiry_date', 'manufacturing_date',
             'is_quality_checked', 'quality_status', 'quality_notes', 'notes'
@@ -254,19 +272,24 @@ class ReceiptLineCreateSerializer(serializers.ModelSerializer):
             'po_line', 'quantity_received', 'quantity_damaged', 'lot_number',
             'expiry_date', 'manufacturing_date', 'quality_status', 'quality_notes', 'notes'
         ]
-    
+
     def validate_quantity_received(self, value):
         if value <= 0:
-            raise serializers.ValidationError("La quantité reçue doit être supérieure à 0")
+            raise serializers.ValidationError(
+                "La quantité reçue doit être supérieure à 0")
         return value
 
 
 class ReceiptListSerializer(serializers.ModelSerializer):
-    po_number = serializers.CharField(source='purchase_order.po_number', read_only=True)
-    supplier_name = serializers.CharField(source='purchase_order.supplier.name', read_only=True)
-    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
+    po_number = serializers.CharField(
+        source='purchase_order.po_number', read_only=True)
+    supplier_name = serializers.CharField(
+        source='purchase_order.supplier.name', read_only=True)
+    warehouse_name = serializers.CharField(
+        source='warehouse.name', read_only=True)
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
+
     class Meta:
         model = Receipt
         fields = [
@@ -278,13 +301,18 @@ class ReceiptListSerializer(serializers.ModelSerializer):
 
 
 class ReceiptDetailSerializer(serializers.ModelSerializer):
-    po_number = serializers.CharField(source='purchase_order.po_number', read_only=True)
-    supplier_name = serializers.CharField(source='purchase_order.supplier.name', read_only=True)
-    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    po_number = serializers.CharField(
+        source='purchase_order.po_number', read_only=True)
+    supplier_name = serializers.CharField(
+        source='purchase_order.supplier.name', read_only=True)
+    warehouse_name = serializers.CharField(
+        source='warehouse.name', read_only=True)
     lines = ReceiptLineSerializer(many=True, read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
-    
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
+    created_by_name = serializers.CharField(
+        source='created_by.full_name', read_only=True)
+
     class Meta:
         model = Receipt
         fields = [
@@ -298,38 +326,40 @@ class ReceiptDetailSerializer(serializers.ModelSerializer):
 
 class ReceiptCreateSerializer(serializers.ModelSerializer):
     lines = ReceiptLineCreateSerializer(many=True)
-    
+
     class Meta:
         model = Receipt
-        fields = ['purchase_order', 'expected_date', 'warehouse', 'delivery_note', 'invoice_number', 'notes', 'lines']
-    
+        fields = ['purchase_order', 'expected_date', 'warehouse',
+                  'delivery_note', 'invoice_number', 'notes', 'lines']
+
     def validate(self, data):
         purchase_order = data.get('purchase_order')
         if purchase_order and purchase_order.status in ['cancelled', 'received']:
-            raise serializers.ValidationError("Cette commande ne peut plus être réceptionnée")
-        
+            raise serializers.ValidationError(
+                "Cette commande ne peut plus être réceptionnée")
+
         lines_data = data.get('lines', [])
         for line_data in lines_data:
             po_line = line_data.get('po_line')
             quantity_received = line_data.get('quantity_received', 0)
-            
+
             total_received = ReceiptLine.objects.filter(po_line=po_line).aggregate(
                 total=Sum('quantity_received')
             )['total'] or 0
             quantity_remaining = po_line.quantity - total_received
-            
+
             if quantity_received > quantity_remaining:
                 raise serializers.ValidationError(
                     f"Quantité reçue ({quantity_received}) dépasse la quantité restante ({quantity_remaining})"
                 )
-        
+
         return data
-    
+
     @transaction.atomic
     def create(self, validated_data):
         lines_data = validated_data.pop('lines')
         purchase_order = validated_data.get('purchase_order')
-        
+
         last_receipt = Receipt.objects.order_by('-id').first()
         num = 1
         if last_receipt and last_receipt.receipt_number:
@@ -338,13 +368,13 @@ class ReceiptCreateSerializer(serializers.ModelSerializer):
             except (ValueError, IndexError):
                 num = 1
         receipt_number = f"REC-{date.today().year}-{num:04d}"
-        
+
         receipt = Receipt.objects.create(
             receipt_number=receipt_number,
             status='in_progress',
             **validated_data
         )
-        
+
         for line_data in lines_data:
             po_line = line_data['po_line']
             quantity_received = line_data['quantity_received']
@@ -354,7 +384,7 @@ class ReceiptCreateSerializer(serializers.ModelSerializer):
             manufacturing_date = line_data.get('manufacturing_date')
             quality_status = line_data.get('quality_status', 'pending')
             notes = line_data.get('notes', '')
-            
+
             lot = None
             if lot_number:
                 lot_defaults = {
@@ -366,27 +396,27 @@ class ReceiptCreateSerializer(serializers.ModelSerializer):
                     'selling_price': po_line.product.selling_price,
                     'created_by': self.context['request'].user
                 }
-                
+
                 if expiry_date:
                     lot_defaults['expiry_date'] = expiry_date
                 if manufacturing_date:
                     lot_defaults['manufacturing_date'] = manufacturing_date
-                
+
                 lot, created = Lot.objects.get_or_create(
                     lot_number=lot_number,
                     defaults=lot_defaults
                 )
-                
+
                 if not created:
                     if expiry_date and not lot.expiry_date:
                         lot.expiry_date = expiry_date
                     if manufacturing_date and not lot.manufacturing_date:
                         lot.manufacturing_date = manufacturing_date
-                
+
                 lot.initial_quantity += quantity_received
                 lot.current_quantity += quantity_received
                 lot.save()
-            
+
             ReceiptLine.objects.create(
                 receipt=receipt,
                 po_line=po_line,
@@ -401,7 +431,7 @@ class ReceiptCreateSerializer(serializers.ModelSerializer):
                 quality_status=quality_status,
                 notes=notes
             )
-            
+
             if lot:
                 StockMovement.objects.create(
                     product=po_line.product,
@@ -415,94 +445,145 @@ class ReceiptCreateSerializer(serializers.ModelSerializer):
                     reason=f"Réception commande {purchase_order.po_number}",
                     created_by=self.context['request'].user
                 )
-        
-        total_ordered = purchase_order.lines.aggregate(total=Sum('quantity'))['total'] or 0
-        total_received = purchase_order.lines.aggregate(total=Sum('quantity_received'))['total'] or 0
-        
+
+        total_ordered = purchase_order.lines.aggregate(
+            total=Sum('quantity'))['total'] or 0
+        total_received = purchase_order.lines.aggregate(
+            total=Sum('quantity_received'))['total'] or 0
+
         if total_received >= total_ordered:
             purchase_order.status = 'received'
         elif total_received > 0:
             purchase_order.status = 'partial'
         purchase_order.save()
-        
+
         receipt.status = 'completed'
         receipt.save()
-        
+
         return receipt
 
 
 # ==================== PURCHASE RETURN ====================
+# ==================== PURCHASE RETURN ====================
 class PurchaseReturnLineSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_code = serializers.CharField(source='product.code', read_only=True)
-    
+
     class Meta:
         model = PurchaseReturnLine
-        fields = ['id', 'receipt_line', 'product', 'product_name', 'product_code', 'quantity', 'unit_price', 'total']
+        fields = ['id', 'receipt_line', 'product', 'product_name',
+                  'product_code', 'quantity', 'unit_price', 'total']
         read_only_fields = ['total']
 
 
+# apps/achats_fournisseurs/serializers.py - Partie PurchaseReturnSerializer
+
 class PurchaseReturnSerializer(serializers.ModelSerializer):
-    po_number = serializers.CharField(source='purchase_order.po_number', read_only=True)
-    supplier_name = serializers.CharField(source='purchase_order.supplier.name', read_only=True)
-    supplier_code = serializers.CharField(source='purchase_order.supplier.code', read_only=True)
-    receipt_number = serializers.CharField(source='receipt.receipt_number', read_only=True)
+    po_number = serializers.CharField(
+        source='purchase_order.po_number', read_only=True)
+    supplier_name = serializers.CharField(
+        source='purchase_order.supplier.name', read_only=True)
+    supplier_code = serializers.CharField(
+        source='purchase_order.supplier.code', read_only=True)
+    receipt_number = serializers.CharField(
+        source='receipt.receipt_number', read_only=True)
     lines = PurchaseReturnLineSerializer(many=True, read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    reason_display = serializers.CharField(source='get_reason_display', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
-    
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
+    reason_display = serializers.CharField(
+        source='get_reason_display', read_only=True)
+    created_by_name = serializers.CharField(
+        source='created_by.full_name', read_only=True)
+
     class Meta:
         model = PurchaseReturn
         fields = [
             'id', 'return_number', 'purchase_order', 'po_number', 'supplier_name',
             'supplier_code', 'receipt', 'receipt_number', 'return_date', 'reason',
             'reason_display', 'status', 'status_display', 'notes', 'lines',
-            'created_at', 'created_by', 'created_by_name'
+            # CORRECTION: 'created_at' n'existe pas, utiliser 'return_date' ou ajouter le champ manquant
+            'created_by', 'created_by_name'
         ]
-        read_only_fields = ['id', 'return_number', 'return_date', 'created_at']
+        read_only_fields = ['id', 'return_number', 'return_date']
 
 
 class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
-    lines = serializers.ListField(child=serializers.DictField(), write_only=True)
-    
+    lines = serializers.ListField(
+        child=serializers.DictField(), write_only=True)
+
     class Meta:
         model = PurchaseReturn
         fields = ['purchase_order', 'receipt', 'reason', 'notes', 'lines']
-    
+
     def validate(self, data):
         purchase_order = data.get('purchase_order')
         receipt = data.get('receipt')
-        
+
         if receipt and receipt.purchase_order != purchase_order:
-            raise serializers.ValidationError("La réception ne correspond pas à la commande")
-        
+            raise serializers.ValidationError(
+                "La réception ne correspond pas à la commande")
+
+        # Vérifier qu'il y a au moins une ligne avec quantité > 0
+        lines_data = data.get('lines', [])
+        if not lines_data or all(line.get('quantity', 0) <= 0 for line in lines_data):
+            raise serializers.ValidationError(
+                {"lines": "Au moins un produit doit être retourné"})
+
+        # Vérifier les quantités par rapport aux réceptions
+        for line_data in lines_data:
+            receipt_line_id = line_data.get('receipt_line')
+            quantity = line_data.get('quantity', 0)
+
+            if quantity <= 0:
+                continue
+
+            try:
+                receipt_line = ReceiptLine.objects.get(id=receipt_line_id)
+                if quantity > receipt_line.quantity_received:
+                    raise serializers.ValidationError(
+                        f"Quantité retournée ({quantity}) dépasse la quantité reçue ({receipt_line.quantity_received})"
+                    )
+            except ReceiptLine.DoesNotExist:
+                raise serializers.ValidationError(
+                    f"Ligne de réception {receipt_line_id} non trouvée")
+
         return data
-    
+
     @transaction.atomic
     def create(self, validated_data):
         lines_data = validated_data.pop('lines')
-        
+        purchase_order = validated_data.get('purchase_order')
+        receipt = validated_data.get('receipt')
+
+        # Générer le numéro de retour
         last_return = PurchaseReturn.objects.order_by('-id').first()
+        num = 1
         if last_return and last_return.return_number:
             try:
                 num = int(last_return.return_number.split('-')[-1]) + 1
             except (ValueError, IndexError):
                 num = 1
-        else:
-            num = 1
         return_number = f"RET-{date.today().year}-{num:04d}"
-        
+
         purchase_return = PurchaseReturn.objects.create(
             return_number=return_number,
-            **validated_data
+            purchase_order=purchase_order,
+            receipt=receipt,
+            reason=validated_data.get('reason'),
+            notes=validated_data.get('notes', ''),
+            created_by=self.context['request'].user
         )
-        
+
         for line_data in lines_data:
-            receipt_line = line_data.get('receipt_line')
-            quantity = line_data.get('quantity')
+            quantity = line_data.get('quantity', 0)
+            if quantity <= 0:
+                continue
+
+            # CORRECTION: Récupérer l'objet ReceiptLine à partir de l'ID
+            receipt_line_id = line_data.get('receipt_line')
+            receipt_line = ReceiptLine.objects.get(id=receipt_line_id)
             product = receipt_line.product
-            
+
             PurchaseReturnLine.objects.create(
                 purchase_return=purchase_return,
                 receipt_line=receipt_line,
@@ -510,11 +591,13 @@ class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
                 quantity=quantity,
                 unit_price=receipt_line.po_line.unit_price
             )
-            
+
+            # Mettre à jour le lot si associé
             if receipt_line.lot:
                 receipt_line.lot.current_quantity -= quantity
                 receipt_line.lot.save()
-                
+
+                # Créer un mouvement de stock pour le retour
                 StockMovement.objects.create(
                     product=product,
                     lot=receipt_line.lot,
@@ -527,20 +610,25 @@ class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
                     reason=f"Retour fournisseur - {purchase_return.get_reason_display()}",
                     created_by=self.context['request'].user
                 )
-            
+
+            # Mettre à jour la quantité reçue sur la ligne de réception
             receipt_line.quantity_received -= quantity
             receipt_line.save()
-        
+
         return purchase_return
 
-
 # ==================== SUPPLIER INVOICE ====================
+
+
 class SupplierInvoiceSerializer(serializers.ModelSerializer):
-    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
-    po_number = serializers.CharField(source='purchase_order.po_number', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    supplier_name = serializers.CharField(
+        source='supplier.name', read_only=True)
+    po_number = serializers.CharField(
+        source='purchase_order.po_number', read_only=True)
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
     remaining_amount = serializers.ReadOnlyField()
-    
+
     class Meta:
         model = SupplierInvoice
         fields = [
@@ -559,10 +647,11 @@ class SupplierInvoiceCreateSerializer(serializers.ModelSerializer):
             'invoice_number', 'purchase_order', 'invoice_date', 'due_date',
             'amount', 'tax_amount', 'total_amount', 'notes'
         ]
-    
+
     def validate_invoice_number(self, value):
         if SupplierInvoice.objects.filter(invoice_number=value).exists():
-            raise serializers.ValidationError("Ce numéro de facture existe déjà")
+            raise serializers.ValidationError(
+                "Ce numéro de facture existe déjà")
         return value
 
 
@@ -570,8 +659,9 @@ class SupplierInvoicePaymentSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     payment_date = serializers.DateField()
     payment_reference = serializers.CharField(required=False, allow_blank=True)
-    
+
     def validate_amount(self, value):
         if value <= 0:
-            raise serializers.ValidationError("Le montant doit être supérieur à 0")
+            raise serializers.ValidationError(
+                "Le montant doit être supérieur à 0")
         return value
