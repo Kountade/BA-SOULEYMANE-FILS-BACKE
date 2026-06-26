@@ -134,15 +134,20 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
         source='supplier.code', read_only=True)
     status_display = serializers.CharField(
         source='get_status_display', read_only=True)
+    has_qr_code = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrder
         fields = [
             'id', 'po_number', 'supplier', 'supplier_name', 'supplier_code',
             'order_date', 'expected_delivery_date', 'actual_delivery_date',
-            'total', 'status', 'status_display', 'created_by'
+            'total', 'status', 'status_display', 'created_by',
+            'has_qr_code'
         ]
         read_only_fields = ['id', 'order_date', 'po_number']
+
+    def get_has_qr_code(self, obj):
+        return bool(obj.qr_code)
 
 
 class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
@@ -162,6 +167,11 @@ class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
     approved_by_name = serializers.CharField(
         source='approved_by.full_name', read_only=True)
 
+    # QR Code fields
+    qr_code = serializers.ImageField(read_only=True)
+    qr_code_data = serializers.CharField(read_only=True)
+    qr_code_url = serializers.SerializerMethodField()
+
     class Meta:
         model = PurchaseOrder
         fields = [
@@ -172,9 +182,19 @@ class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
             'tax_amount', 'shipping_cost', 'total', 'status', 'status_display',
             'notes', 'internal_notes', 'shipping_address', 'tracking_number',
             'lines', 'created_at', 'updated_at', 'created_by', 'created_by_name',
-            'approved_by', 'approved_by_name', 'approved_at'
+            'approved_by', 'approved_by_name', 'approved_at',
+            'qr_code', 'qr_code_data', 'qr_code_url'
         ]
-        read_only_fields = ['id', 'order_date', 'po_number']
+        read_only_fields = ['id', 'order_date',
+                            'po_number', 'qr_code', 'qr_code_data']
+
+    def get_qr_code_url(self, obj):
+        if obj.qr_code:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.qr_code.url)
+            return obj.qr_code.url
+        return None
 
 
 class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
@@ -220,6 +240,11 @@ class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
             )
 
         purchase_order.calculate_totals()
+
+        # Générer le QR Code après la création
+        purchase_order.generate_qr_code()
+        purchase_order.save()
+
         return purchase_order
 
 
@@ -238,6 +263,11 @@ class PurchaseOrderUpdateSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         instance.calculate_totals()
+
+        # Régénérer le QR Code si nécessaire
+        instance.generate_qr_code()
+        instance.save()
+
         return instance
 
 
@@ -289,15 +319,19 @@ class ReceiptListSerializer(serializers.ModelSerializer):
         source='warehouse.name', read_only=True)
     status_display = serializers.CharField(
         source='get_status_display', read_only=True)
+    has_qr_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Receipt
         fields = [
             'id', 'receipt_number', 'po_number', 'supplier_name', 'warehouse',
             'warehouse_name', 'receipt_date', 'expected_date', 'status',
-            'status_display', 'created_by'
+            'status_display', 'created_by', 'has_qr_code'
         ]
         read_only_fields = ['id', 'receipt_number', 'receipt_date']
+
+    def get_has_qr_code(self, obj):
+        return bool(obj.qr_code)
 
 
 class ReceiptDetailSerializer(serializers.ModelSerializer):
@@ -313,15 +347,30 @@ class ReceiptDetailSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source='created_by.full_name', read_only=True)
 
+    # QR Code fields
+    qr_code = serializers.ImageField(read_only=True)
+    qr_code_data = serializers.CharField(read_only=True)
+    qr_code_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Receipt
         fields = [
             'id', 'receipt_number', 'purchase_order', 'po_number', 'supplier_name',
             'receipt_date', 'expected_date', 'warehouse', 'warehouse_name',
             'status', 'status_display', 'notes', 'delivery_note', 'invoice_number',
-            'lines', 'created_at', 'created_by', 'created_by_name'
+            'lines', 'created_at', 'created_by', 'created_by_name',
+            'qr_code', 'qr_code_data', 'qr_code_url'
         ]
-        read_only_fields = ['id', 'receipt_number', 'receipt_date']
+        read_only_fields = ['id', 'receipt_number',
+                            'receipt_date', 'qr_code', 'qr_code_data']
+
+    def get_qr_code_url(self, obj):
+        if obj.qr_code:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.qr_code.url)
+            return obj.qr_code.url
+        return None
 
 
 class ReceiptCreateSerializer(serializers.ModelSerializer):
@@ -460,10 +509,13 @@ class ReceiptCreateSerializer(serializers.ModelSerializer):
         receipt.status = 'completed'
         receipt.save()
 
+        # Générer le QR Code après la création
+        receipt.generate_qr_code()
+        receipt.save()
+
         return receipt
 
 
-# ==================== PURCHASE RETURN ====================
 # ==================== PURCHASE RETURN ====================
 class PurchaseReturnLineSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
@@ -475,8 +527,6 @@ class PurchaseReturnLineSerializer(serializers.ModelSerializer):
                   'product_code', 'quantity', 'unit_price', 'total']
         read_only_fields = ['total']
 
-
-# apps/achats_fournisseurs/serializers.py - Partie PurchaseReturnSerializer
 
 class PurchaseReturnSerializer(serializers.ModelSerializer):
     po_number = serializers.CharField(
@@ -495,16 +545,30 @@ class PurchaseReturnSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source='created_by.full_name', read_only=True)
 
+    # QR Code fields
+    qr_code = serializers.ImageField(read_only=True)
+    qr_code_data = serializers.CharField(read_only=True)
+    qr_code_url = serializers.SerializerMethodField()
+
     class Meta:
         model = PurchaseReturn
         fields = [
             'id', 'return_number', 'purchase_order', 'po_number', 'supplier_name',
             'supplier_code', 'receipt', 'receipt_number', 'return_date', 'reason',
             'reason_display', 'status', 'status_display', 'notes', 'lines',
-            # CORRECTION: 'created_at' n'existe pas, utiliser 'return_date' ou ajouter le champ manquant
-            'created_by', 'created_by_name'
+            'created_by', 'created_by_name',
+            'qr_code', 'qr_code_data', 'qr_code_url'
         ]
-        read_only_fields = ['id', 'return_number', 'return_date']
+        read_only_fields = ['id', 'return_number',
+                            'return_date', 'qr_code', 'qr_code_data']
+
+    def get_qr_code_url(self, obj):
+        if obj.qr_code:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.qr_code.url)
+            return obj.qr_code.url
+        return None
 
 
 class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
@@ -523,13 +587,11 @@ class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "La réception ne correspond pas à la commande")
 
-        # Vérifier qu'il y a au moins une ligne avec quantité > 0
         lines_data = data.get('lines', [])
         if not lines_data or all(line.get('quantity', 0) <= 0 for line in lines_data):
             raise serializers.ValidationError(
                 {"lines": "Au moins un produit doit être retourné"})
 
-        # Vérifier les quantités par rapport aux réceptions
         for line_data in lines_data:
             receipt_line_id = line_data.get('receipt_line')
             quantity = line_data.get('quantity', 0)
@@ -555,7 +617,6 @@ class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
         purchase_order = validated_data.get('purchase_order')
         receipt = validated_data.get('receipt')
 
-        # Générer le numéro de retour
         last_return = PurchaseReturn.objects.order_by('-id').first()
         num = 1
         if last_return and last_return.return_number:
@@ -579,7 +640,6 @@ class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
             if quantity <= 0:
                 continue
 
-            # CORRECTION: Récupérer l'objet ReceiptLine à partir de l'ID
             receipt_line_id = line_data.get('receipt_line')
             receipt_line = ReceiptLine.objects.get(id=receipt_line_id)
             product = receipt_line.product
@@ -592,12 +652,10 @@ class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
                 unit_price=receipt_line.po_line.unit_price
             )
 
-            # Mettre à jour le lot si associé
             if receipt_line.lot:
                 receipt_line.lot.current_quantity -= quantity
                 receipt_line.lot.save()
 
-                # Créer un mouvement de stock pour le retour
                 StockMovement.objects.create(
                     product=product,
                     lot=receipt_line.lot,
@@ -611,15 +669,17 @@ class PurchaseReturnCreateSerializer(serializers.ModelSerializer):
                     created_by=self.context['request'].user
                 )
 
-            # Mettre à jour la quantité reçue sur la ligne de réception
             receipt_line.quantity_received -= quantity
             receipt_line.save()
 
+        # Générer le QR Code après la création
+        purchase_return.generate_qr_code()
+        purchase_return.save()
+
         return purchase_return
 
+
 # ==================== SUPPLIER INVOICE ====================
-
-
 class SupplierInvoiceSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(
         source='supplier.name', read_only=True)
@@ -665,3 +725,15 @@ class SupplierInvoicePaymentSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Le montant doit être supérieur à 0")
         return value
+
+
+# ==================== QR CODE SERIALIZER ====================
+class QRCodeSerializer(serializers.Serializer):
+    """Serializer pour générer des QR Codes"""
+    type = serializers.CharField()
+    id = serializers.IntegerField()
+    number = serializers.CharField()
+    data = serializers.JSONField()
+
+    class Meta:
+        fields = ['type', 'id', 'number', 'data']
