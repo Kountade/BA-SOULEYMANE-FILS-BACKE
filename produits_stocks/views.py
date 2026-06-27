@@ -1,4 +1,5 @@
 # apps/produits_stocks/views.py
+from .serializers import TransferRequestSerializer, TransferResponseSerializer
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,7 +8,7 @@ from django.utils import timezone
 from datetime import date, timedelta
 from .models import (
     Category, UnitMeasure, Product, Warehouse, Lot, Stock,
-    StockMovement, ExpiryAlert, Inventory, InventoryLine
+    StockMovement, ExpiryAlert, Inventory, InventoryLine,
 )
 from .serializers import (
     CategorySerializer, UnitMeasureSerializer, ProductListSerializer,
@@ -661,6 +662,117 @@ class InventoryViewSet(viewsets.ModelViewSet):
         return Response({"message": "Ajustements appliqués"})
 
 # ==================== DASHBOARD STATS VIEWSET ====================
+# produits_stocks/views.py
+
+
+class TransferViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAuthenticated, IsGestionnaire]
+
+    def create(self, request):
+        # Valider la requête avec le sérialiseur
+        serializer = TransferRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        from_warehouse_id = data['from_warehouse_id']
+        to_warehouse_id = data['to_warehouse_id']
+        items = data['items']
+        reason = data.get('reason', '')
+        notes = data.get('notes', '')
+
+        from_warehouse = Warehouse.objects.get(id=from_warehouse_id)
+        to_warehouse = Warehouse.objects.get(id=to_warehouse_id)
+
+        movements_created = []
+
+        for item in items:
+            product_id = item['product_id']
+            quantity = item['quantity']
+            product = Product.objects.get(id=product_id)
+
+            stock_source = Stock.objects.get(
+                product=product, warehouse=from_warehouse)
+            success, lots_used = stock_source.consume_stock(quantity)
+            if not success:
+                return Response(
+                    {"error": f"Impossible de consommer le stock pour {product.name}."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            reference_number = f"TRANSF-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+
+            # Mouvements de sortie
+            for lot_data in lots_used:
+                lot = lot_data['lot']
+                qty = lot_data['quantity']
+                StockMovement.objects.create(
+                    product=product,
+                    lot=lot,
+                    from_warehouse=from_warehouse,
+                    to_warehouse=to_warehouse,
+                    movement_type='transfer_out',
+                    quantity=qty,
+                    reason=reason,
+                    notes=notes,
+                    created_by=request.user,
+                    reference_number=reference_number
+                )
+
+            # Mouvements d'entrée (nouveaux lots)
+            for lot_data in lots_used:
+                source_lot = lot_data['lot']
+                qty = lot_data['quantity']
+                new_lot = Lot.objects.create(
+                    product=product,
+                    warehouse=to_warehouse,
+                    lot_number=f"{source_lot.lot_number}-TRANSF",
+                    batch_number=source_lot.batch_number,
+                    barcode=source_lot.barcode,
+                    initial_quantity=qty,
+                    current_quantity=qty,
+                    reserved_quantity=0,
+                    unit=source_lot.unit,
+                    manufacturing_date=source_lot.manufacturing_date,
+                    expiry_date=source_lot.expiry_date,
+                    purchase_price=source_lot.purchase_price,
+                    selling_price=source_lot.selling_price,
+                    status='good',
+                    created_by=request.user,
+                    notes=f"Transfert depuis {from_warehouse.name}"
+                )
+                StockMovement.objects.create(
+                    product=product,
+                    lot=new_lot,
+                    from_warehouse=from_warehouse,
+                    to_warehouse=to_warehouse,
+                    movement_type='transfer_in',
+                    quantity=qty,
+                    reason=reason,
+                    notes=notes,
+                    created_by=request.user,
+                    reference_number=reference_number
+                )
+
+            # Mettre à jour les stocks
+            stock_source.update_quantity()
+            stock_dest, _ = Stock.objects.get_or_create(
+                product=product, warehouse=to_warehouse)
+            stock_dest.update_quantity()
+
+            movements_created.append({
+                "product": product.name,
+                "quantity": quantity,
+                "from_warehouse": from_warehouse.name,
+                "to_warehouse": to_warehouse.name,
+                "lots_used": [{"lot": l['lot'].lot_number, "qty": l['quantity']} for l in lots_used]
+            })
+
+        response_serializer = TransferResponseSerializer({
+            "message": "Transfert effectué avec succès",
+            "movements": movements_created
+        })
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class DashboardStatsViewSet(viewsets.ViewSet):

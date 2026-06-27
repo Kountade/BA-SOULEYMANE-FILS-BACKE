@@ -980,3 +980,31 @@ class InventoryLine(models.Model):
                 stock.save()
             
             self.verify(user)
+            
+            
+class Transfer(models.Model):
+    STATUS_CHOICES = (
+        ('draft', 'Brouillon'),
+        ('in_progress', 'En cours'),
+        ('completed', 'Terminé'),
+        ('cancelled', 'Annulé'),
+    )
+    from_warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, related_name='transfers_out')
+    to_warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, related_name='transfers_in')
+    reference_number = models.CharField(max_length=50, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    reason = models.CharField(max_length=200, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
+    validated_at = models.DateTimeField(null=True, blank=True)
+    validated_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='validated_transfers')
+
+class TransferItem(models.Model):
+    transfer = models.ForeignKey(Transfer, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.IntegerField()
+    # On peut stocker les lots source et destination si besoin
+    source_lot = models.ForeignKey(Lot, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    destination_lot = models.ForeignKey(Lot, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
