@@ -158,7 +158,7 @@ class Vente(models.Model):
     
     # Livraison
     delivery_method = models.CharField(max_length=50, blank=True, verbose_name="Méthode de livraison")
-    delivery_address = models.TextField(verbose_name="Adresse de livraison")
+    delivery_address = models.TextField(blank=True, null=True, verbose_name="Adresse de livraison") 
     delivery_status = models.CharField(max_length=50, default='pending', verbose_name="Statut livraison")
     tracking_number = models.CharField(max_length=100, blank=True, verbose_name="N° de suivi")
     
