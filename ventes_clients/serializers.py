@@ -264,35 +264,6 @@ class VenteStatusUpdateSerializer(serializers.Serializer):
         return value
 
 
-# ==================== PAIEMENT ====================
-class PaiementSerializer(serializers.ModelSerializer):
-    method_display = serializers.CharField(
-        source='get_method_display', read_only=True)
-    received_by_name = serializers.CharField(
-        source='received_by.full_name', read_only=True)
-
-    class Meta:
-        model = Paiement
-        fields = [
-            'id', 'sale', 'amount', 'method', 'method_display',
-            'reference', 'payment_date', 'received_by', 'received_by_name',
-            'notes'
-        ]
-        read_only_fields = ['id', 'payment_date']
-
-
-class PaiementCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Paiement
-        fields = ['sale', 'amount', 'method', 'reference', 'notes']
-
-    def validate_amount(self, value):
-        if value <= 0:
-            raise serializers.ValidationError(
-                "Le montant doit être supérieur à 0")
-        return value
-
-
 # ==================== FACTURE ====================
 class FactureSerializer(serializers.ModelSerializer):
     client_name = serializers.CharField(source='client.name', read_only=True)
@@ -301,6 +272,7 @@ class FactureSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(
         source='get_status_display', read_only=True)
     remaining_amount = serializers.ReadOnlyField()
+    paiements = serializers.SerializerMethodField()
 
     # QR Code fields
     qr_code = serializers.ImageField(read_only=True)
@@ -313,7 +285,8 @@ class FactureSerializer(serializers.ModelSerializer):
             'id', 'invoice_number', 'sale', 'sale_number', 'client', 'client_name',
             'invoice_date', 'due_date', 'subtotal', 'tax_amount', 'total',
             'amount_paid', 'remaining_amount', 'status', 'status_display',
-            'pdf_file', 'notes', 'qr_code', 'qr_code_data', 'qr_code_url',
+            'pdf_file', 'notes', 'paiements',
+            'qr_code', 'qr_code_data', 'qr_code_url',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'invoice_date', 'qr_code', 'qr_code_data']
@@ -325,6 +298,11 @@ class FactureSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.qr_code.url)
             return obj.qr_code.url
         return None
+
+    def get_paiements(self, obj):
+        from .serializers import PaiementSerializer
+        paiements = obj.paiements.all()
+        return PaiementSerializer(paiements, many=True).data
 
 
 class FactureCreateSerializer(serializers.ModelSerializer):
@@ -368,6 +346,85 @@ class FactureCreateSerializer(serializers.ModelSerializer):
         facture.save()
 
         return facture
+
+
+# ==================== PAIEMENT (CORRIGÉ - LIÉ À FACTURE) ====================
+# apps/ventes_clients/serializers.py
+
+class PaiementSerializer(serializers.ModelSerializer):
+    method_display = serializers.CharField(
+        source='get_method_display', read_only=True)
+    received_by_name = serializers.CharField(
+        source='received_by.full_name', read_only=True)
+
+    # Informations de la facture
+    facture_number = serializers.CharField(
+        source='facture.invoice_number', read_only=True)
+    client_name = serializers.CharField(
+        source='facture.client.name', read_only=True)
+    remaining_amount = serializers.SerializerMethodField()
+    facture_total = serializers.SerializerMethodField()
+
+    # ✅ QR Code fields
+    qr_code = serializers.ImageField(read_only=True)
+    qr_code_data = serializers.CharField(read_only=True)
+    qr_code_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Paiement
+        fields = [
+            'id',
+            'facture', 'facture_number',
+            'client_name',
+            'amount',
+            'method', 'method_display',
+            'reference',
+            'payment_date',
+            'received_by', 'received_by_name',
+            'remaining_amount',
+            'facture_total',
+            'notes',
+            # ✅ Ajout des champs QR Code
+            'qr_code', 'qr_code_data', 'qr_code_url'
+        ]
+        read_only_fields = ['id', 'payment_date', 'qr_code', 'qr_code_data']
+
+    def get_remaining_amount(self, obj):
+        return obj.facture.remaining_amount
+
+    def get_facture_total(self, obj):
+        return obj.facture.total
+
+    def get_qr_code_url(self, obj):
+        if obj.qr_code:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.qr_code.url)
+            return obj.qr_code.url
+        return None
+
+
+class PaiementCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Paiement
+        fields = ['facture', 'amount', 'method', 'reference', 'notes']
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "Le montant doit être supérieur à 0")
+        return value
+
+    def validate(self, data):
+        facture = data.get('facture')
+        amount = data.get('amount', 0)
+
+        if facture and amount > facture.remaining_amount:
+            raise serializers.ValidationError(
+                {"amount": f"Le montant dépasse le solde restant ({facture.remaining_amount})"}
+            )
+
+        return data
 
 
 # ==================== AVOIR ====================
