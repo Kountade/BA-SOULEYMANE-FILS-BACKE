@@ -1,4 +1,4 @@
-# apps/finances/models.py
+# finances/models.py
 
 from django.db import models
 from django.utils import timezone
@@ -6,8 +6,10 @@ from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 from users.models import CustomUser
-from produits_stocks.models import Product, Warehouse
-from ventes_clients.models import Vente, Facture, Paiement
+from produits_stocks.models import Product, Warehouse, Lot
+# ✅ Imports corrects pour les applications existantes
+from achats_fournisseurs.models import Supplier, PurchaseOrder, SupplierInvoice
+from ventes_clients.models import Vente, Facture, Paiement, Client
 
 
 # ==================== COMPTE COMPTABLE ====================
@@ -35,40 +37,50 @@ class CompteComptable(models.Model):
     )
 
     # Identifiants
-    numero = models.CharField(max_length=20, unique=True, verbose_name="Numéro de compte")
+    numero = models.CharField(
+        max_length=20, unique=True, verbose_name="Numéro de compte")
     nom = models.CharField(max_length=200, verbose_name="Nom du compte")
-    nom_complet = models.CharField(max_length=255, blank=True, verbose_name="Nom complet")
-    
+    nom_complet = models.CharField(
+        max_length=255, blank=True, verbose_name="Nom complet")
+
     # Classification
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
-    classe = models.CharField(max_length=20, choices=CLASSE_CHOICES, verbose_name="Classe")
-    
+    type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
+    classe = models.CharField(
+        max_length=20, choices=CLASSE_CHOICES, verbose_name="Classe")
+
     # Hiérarchie
     parent = models.ForeignKey(
-        'self', 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='children',
         verbose_name="Compte parent"
     )
-    niveau = models.PositiveIntegerField(default=0, verbose_name="Niveau hiérarchique")
-    
+    niveau = models.PositiveIntegerField(
+        default=0, verbose_name="Niveau hiérarchique")
+
     # Solde
-    solde = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Solde actuel")
-    solde_initial = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Solde initial")
-    
+    solde = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Solde actuel")
+    solde_initial = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Solde initial")
+
     # Caractéristiques
-    is_analytique = models.BooleanField(default=False, verbose_name="Compte analytique")
-    is_budgetaire = models.BooleanField(default=False, verbose_name="Compte budgétaire")
+    is_analytique = models.BooleanField(
+        default=False, verbose_name="Compte analytique")
+    is_budgetaire = models.BooleanField(
+        default=False, verbose_name="Compte budgétaire")
     is_active = models.BooleanField(default=True, verbose_name="Actif")
     is_imported = models.BooleanField(default=False, verbose_name="Importé")
-    
+
     # Métadonnées
     notes = models.TextField(blank=True, verbose_name="Notes")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         verbose_name = "Compte comptable"
@@ -86,13 +98,13 @@ class CompteComptable(models.Model):
 
     def update_solde(self):
         """Met à jour le solde du compte"""
-        # Calculer le solde à partir des écritures
         from django.db.models import Sum
-        
-        # Débit - Crédit
-        debit_total = self.ecritures_debit.aggregate(total=Sum('montant'))['total'] or Decimal('0')
-        credit_total = self.ecritures_credit.aggregate(total=Sum('montant'))['total'] or Decimal('0')
-        
+
+        debit_total = self.ecritures_debit.aggregate(total=Sum('montant'))[
+            'total'] or Decimal('0')
+        credit_total = self.ecritures_credit.aggregate(total=Sum('montant'))[
+            'total'] or Decimal('0')
+
         self.solde = debit_total - credit_total
         self.save()
 
@@ -105,7 +117,8 @@ class EcritureComptable(models.Model):
     TYPE_CHOICES = (
         ('vente', 'Vente'),
         ('achat', 'Achat'),
-        ('paiement', 'Paiement'),
+        ('paiement_client', 'Paiement client'),
+        ('paiement_fournisseur', 'Paiement fournisseur'),
         ('recette', 'Recette'),
         ('depense', 'Dépense'),
         ('tresorerie', 'Trésorerie'),
@@ -120,51 +133,118 @@ class EcritureComptable(models.Model):
     )
 
     # Numéro d'écriture
-    numero = models.CharField(max_length=50, unique=True, verbose_name="N° d'écriture")
-    
+    numero = models.CharField(
+        max_length=50, unique=True, verbose_name="N° d'écriture")
+
     # Dates
     date_ecriture = models.DateField(verbose_name="Date d'écriture")
-    date_comptable = models.DateField(auto_now_add=True, verbose_name="Date comptable")
-    date_echeance = models.DateField(null=True, blank=True, verbose_name="Date d'échéance")
-    
+    date_comptable = models.DateField(
+        auto_now_add=True, verbose_name="Date comptable")
+    date_echeance = models.DateField(
+        null=True, blank=True, verbose_name="Date d'échéance")
+
     # Comptes
     compte_debit = models.ForeignKey(
-        CompteComptable, 
-        on_delete=models.CASCADE, 
+        CompteComptable,
+        on_delete=models.CASCADE,
         related_name='ecritures_debit',
         verbose_name="Compte débit"
     )
     compte_credit = models.ForeignKey(
-        CompteComptable, 
-        on_delete=models.CASCADE, 
+        CompteComptable,
+        on_delete=models.CASCADE,
         related_name='ecritures_credit',
         verbose_name="Compte crédit"
     )
-    
+
     # Montants
-    montant = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Montant")
-    taxe = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Taxe")
-    total = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Total TTC")
-    
+    montant = models.DecimalField(
+        max_digits=15, decimal_places=2, verbose_name="Montant")
+    taxe = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Taxe")
+    total = models.DecimalField(
+        max_digits=15, decimal_places=2, verbose_name="Total TTC")
+
     # Références
-    reference = models.CharField(max_length=100, blank=True, verbose_name="Référence")
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
-    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='brouillon', verbose_name="Statut")
-    
-    # Liens vers d'autres modèles
-    vente = models.ForeignKey(Vente, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Vente")
-    facture = models.ForeignKey(Facture, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Facture")
-    paiement = models.ForeignKey(Paiement, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Paiement")
-    
+    reference = models.CharField(
+        max_length=100, blank=True, verbose_name="Référence")
+    type = models.CharField(
+        max_length=30, choices=TYPE_CHOICES, verbose_name="Type")
+    statut = models.CharField(
+        max_length=20, choices=STATUT_CHOICES, default='brouillon', verbose_name="Statut")
+
+    # ✅ Liens vers les modèles existants
+    vente = models.ForeignKey(
+        Vente,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Vente"
+    )
+    facture = models.ForeignKey(
+        Facture,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Facture client"
+    )
+    paiement = models.ForeignKey(
+        Paiement,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Paiement client"
+    )
+    supplier_invoice = models.ForeignKey(
+        SupplierInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Facture fournisseur"
+    )
+    purchase_order = models.ForeignKey(
+        PurchaseOrder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Bon de commande"
+    )
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Fournisseur"
+    )
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Client"
+    )
+
     # Description
     description = models.TextField(verbose_name="Description")
     notes = models.TextField(blank=True, verbose_name="Notes")
-    
+
     # Métadonnées
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='ecritures_created')
-    validated_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='ecritures_validated')
+    created_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ecritures_created'
+    )
+    validated_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ecritures_validated'
+    )
     validated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -178,7 +258,6 @@ class EcritureComptable(models.Model):
     def save(self, *args, **kwargs):
         self.total = self.montant + self.taxe
         super().save(*args, **kwargs)
-        # Mettre à jour les soldes des comptes
         self.compte_debit.update_solde()
         self.compte_credit.update_solde()
 
@@ -206,28 +285,35 @@ class Tresorerie(models.Model):
     # Identifiants
     nom = models.CharField(max_length=100, verbose_name="Nom")
     code = models.CharField(max_length=20, unique=True, verbose_name="Code")
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
-    
+    type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
+
     # Informations bancaires
-    banque = models.CharField(max_length=100, blank=True, verbose_name="Banque")
+    banque = models.CharField(
+        max_length=100, blank=True, verbose_name="Banque")
     iban = models.CharField(max_length=50, blank=True, verbose_name="IBAN")
     bic = models.CharField(max_length=20, blank=True, verbose_name="BIC/SWIFT")
-    titulaire = models.CharField(max_length=100, blank=True, verbose_name="Titulaire")
-    
+    titulaire = models.CharField(
+        max_length=100, blank=True, verbose_name="Titulaire")
+
     # Solde
-    solde_initial = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Solde initial")
-    solde_actuel = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Solde actuel")
-    solde_minimum = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Solde minimum")
-    
+    solde_initial = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Solde initial")
+    solde_actuel = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Solde actuel")
+    solde_minimum = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Solde minimum")
+
     # Caractéristiques
     is_active = models.BooleanField(default=True, verbose_name="Actif")
     is_default = models.BooleanField(default=False, verbose_name="Par défaut")
-    
+
     # Métadonnées
     notes = models.TextField(blank=True, verbose_name="Notes")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         verbose_name = "Trésorerie"
@@ -240,10 +326,12 @@ class Tresorerie(models.Model):
     def update_solde(self):
         """Met à jour le solde actuel"""
         from django.db.models import Sum
-        
-        entree_total = self.mouvements.filter(type='entree').aggregate(total=Sum('montant'))['total'] or Decimal('0')
-        sortie_total = self.mouvements.filter(type='sortie').aggregate(total=Sum('montant'))['total'] or Decimal('0')
-        
+
+        entree_total = self.mouvements.filter(type='entree').aggregate(
+            total=Sum('montant'))['total'] or Decimal('0')
+        sortie_total = self.mouvements.filter(type='sortie').aggregate(
+            total=Sum('montant'))['total'] or Decimal('0')
+
         self.solde_actuel = self.solde_initial + entree_total - sortie_total
         self.save()
 
@@ -260,7 +348,7 @@ class MouvementTresorerie(models.Model):
 
     CATEGORIE_CHOICES = (
         ('vente', 'Vente'),
-        ('paiement', 'Paiement fournisseur'),
+        ('paiement_fournisseur', 'Paiement fournisseur'),
         ('recette', 'Recette'),
         ('depense', 'Dépense'),
         ('transfert', 'Transfert entre comptes'),
@@ -268,27 +356,64 @@ class MouvementTresorerie(models.Model):
         ('autre', 'Autre'),
     )
 
-    tresorerie = models.ForeignKey(Tresorerie, on_delete=models.CASCADE, related_name='mouvements')
-    
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
-    categorie = models.CharField(max_length=20, choices=CATEGORIE_CHOICES, verbose_name="Catégorie")
-    
-    montant = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Montant")
-    date_mouvement = models.DateTimeField(auto_now_add=True, verbose_name="Date du mouvement")
+    tresorerie = models.ForeignKey(
+        Tresorerie,
+        on_delete=models.CASCADE,
+        related_name='mouvements'
+    )
+
+    type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
+    categorie = models.CharField(
+        max_length=30, choices=CATEGORIE_CHOICES, verbose_name="Catégorie")
+
+    montant = models.DecimalField(
+        max_digits=15, decimal_places=2, verbose_name="Montant")
+    date_mouvement = models.DateTimeField(
+        auto_now_add=True, verbose_name="Date du mouvement")
     date_valeur = models.DateField(verbose_name="Date de valeur")
-    
-    reference = models.CharField(max_length=100, blank=True, verbose_name="Référence")
+
+    reference = models.CharField(
+        max_length=100, blank=True, verbose_name="Référence")
     description = models.TextField(verbose_name="Description")
-    
-    # Liens
-    ecriture = models.ForeignKey(EcritureComptable, on_delete=models.SET_NULL, null=True, blank=True)
-    vente = models.ForeignKey(Vente, on_delete=models.SET_NULL, null=True, blank=True)
-    paiement = models.ForeignKey(Paiement, on_delete=models.SET_NULL, null=True, blank=True)
-    
+
+    # ✅ Liens vers les modèles existants
+    ecriture = models.ForeignKey(
+        EcritureComptable,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    vente = models.ForeignKey(
+        Vente,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    paiement = models.ForeignKey(
+        Paiement,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    supplier_invoice = models.ForeignKey(
+        SupplierInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
     # Métadonnées
     notes = models.TextField(blank=True, verbose_name="Notes")
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         verbose_name = "Mouvement de trésorerie"
@@ -300,7 +425,6 @@ class MouvementTresorerie(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Mettre à jour le solde de la trésorerie
         if self.tresorerie:
             self.tresorerie.update_solde()
 
@@ -325,6 +449,7 @@ class Depense(models.Model):
         ('impots', 'Impôts et taxes'),
         ('assurance', 'Assurance'),
         ('frais_professionnels', 'Frais professionnels'),
+        ('achat_stock', 'Achat de stock'),
         ('autre', 'Autre'),
     )
 
@@ -337,54 +462,88 @@ class Depense(models.Model):
     )
 
     # Identifiants
-    reference = models.CharField(max_length=50, unique=True, verbose_name="Référence")
-    
+    reference = models.CharField(
+        max_length=50, unique=True, verbose_name="Référence")
+
     # Informations
-    categorie = models.CharField(max_length=50, choices=CATEGORIE_CHOICES, verbose_name="Catégorie")
+    categorie = models.CharField(
+        max_length=30, choices=CATEGORIE_CHOICES, verbose_name="Catégorie")
     description = models.TextField(verbose_name="Description")
-    montant = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Montant")
-    taxe = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="TVA")
-    total = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Total TTC")
-    
+    montant = models.DecimalField(
+        max_digits=15, decimal_places=2, verbose_name="Montant")
+    taxe = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="TVA")
+    total = models.DecimalField(
+        max_digits=15, decimal_places=2, verbose_name="Total TTC")
+
     # Dates
     date_depense = models.DateField(verbose_name="Date de la dépense")
-    date_echeance = models.DateField(null=True, blank=True, verbose_name="Date d'échéance")
-    
+    date_echeance = models.DateField(
+        null=True, blank=True, verbose_name="Date d'échéance")
+
     # Paiement
-    mode_paiement = models.CharField(max_length=50, blank=True, verbose_name="Mode de paiement")
-    reference_paiement = models.CharField(max_length=100, blank=True, verbose_name="Référence paiement")
-    date_paiement = models.DateField(null=True, blank=True, verbose_name="Date de paiement")
-    
-    # Fournisseur
-    fournisseur = models.ForeignKey(
-        'achats.Fournisseur', 
-        on_delete=models.SET_NULL, 
-        null=True, 
+    mode_paiement = models.CharField(
+        max_length=50, blank=True, verbose_name="Mode de paiement")
+    reference_paiement = models.CharField(
+        max_length=100, blank=True, verbose_name="Référence paiement")
+    date_paiement = models.DateField(
+        null=True, blank=True, verbose_name="Date de paiement")
+
+    # ✅ Fournisseur - Utiliser Supplier de achats_fournisseurs
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         verbose_name="Fournisseur"
     )
-    fournisseur_nom = models.CharField(max_length=200, blank=True, verbose_name="Nom du fournisseur")
-    
+    supplier_name = models.CharField(
+        max_length=200, blank=True, verbose_name="Nom du fournisseur")
+
     # Statut
-    statut = models.CharField(max_length=20, choices=STATUS_CHOICES, default='en_attente', verbose_name="Statut")
-    
+    statut = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='en_attente', verbose_name="Statut")
+
     # Pièces justificatives
-    piece_jointe = models.FileField(upload_to='depenses/', null=True, blank=True, verbose_name="Pièce jointe")
-    
-    # Liens
-    tresorerie = models.ForeignKey(Tresorerie, on_delete=models.SET_NULL, null=True, blank=True)
-    ecriture = models.ForeignKey(EcritureComptable, on_delete=models.SET_NULL, null=True, blank=True)
-    
+    piece_jointe = models.FileField(
+        upload_to='depenses/', null=True, blank=True, verbose_name="Pièce jointe")
+
+    # ✅ Liens vers les modèles existants
+    tresorerie = models.ForeignKey(
+        Tresorerie,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    ecriture = models.ForeignKey(
+        EcritureComptable,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    purchase_order = models.ForeignKey(
+        PurchaseOrder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Bon de commande"
+    )
+
     # Métadonnées
     notes = models.TextField(blank=True, verbose_name="Notes")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
     approuve_par = models.ForeignKey(
-        CustomUser, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='depenses_approuvees'
     )
     approuve_le = models.DateTimeField(null=True, blank=True)
@@ -434,25 +593,32 @@ class Budget(models.Model):
     )
 
     nom = models.CharField(max_length=100, verbose_name="Nom")
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
-    
-    montant_total = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Montant total")
-    montant_utilise = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Montant utilisé")
-    montant_restant = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Montant restant")
-    
+    type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
+
+    montant_total = models.DecimalField(
+        max_digits=15, decimal_places=2, verbose_name="Montant total")
+    montant_utilise = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Montant utilisé")
+    montant_restant = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Montant restant")
+
     date_debut = models.DateField(verbose_name="Date début")
     date_fin = models.DateField(verbose_name="Date fin")
-    
-    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='en_cours', verbose_name="Statut")
-    
+
+    statut = models.CharField(
+        max_length=20, choices=STATUT_CHOICES, default='en_cours', verbose_name="Statut")
+
     # Lignes de budget
-    categories = models.ManyToManyField('BudgetCategorie', through='BudgetLigne', verbose_name="Catégories")
-    
+    categories = models.ManyToManyField(
+        'BudgetCategorie', through='BudgetLigne', verbose_name="Catégories")
+
     # Métadonnées
     notes = models.TextField(blank=True, verbose_name="Notes")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         verbose_name = "Budget"
@@ -467,7 +633,7 @@ class Budget(models.Model):
         total_utilise = self.lignes.aggregate(
             total=models.Sum('montant_utilise')
         )['total'] or Decimal('0')
-        
+
         self.montant_utilise = total_utilise
         self.montant_restant = self.montant_total - self.montant_utilise
         self.save()
@@ -481,9 +647,9 @@ class BudgetCategorie(models.Model):
     nom = models.CharField(max_length=100, verbose_name="Nom")
     description = models.TextField(blank=True, verbose_name="Description")
     code = models.CharField(max_length=20, unique=True, verbose_name="Code")
-    
+
     is_active = models.BooleanField(default=True, verbose_name="Actif")
-    
+
     class Meta:
         verbose_name = "Catégorie de budget"
         verbose_name_plural = "Catégories de budget"
@@ -498,13 +664,17 @@ class BudgetLigne(models.Model):
     """
     Ligne de budget
     """
-    budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='lignes')
+    budget = models.ForeignKey(
+        Budget, on_delete=models.CASCADE, related_name='lignes')
     categorie = models.ForeignKey(BudgetCategorie, on_delete=models.CASCADE)
-    
-    montant_prevu = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Montant prévu")
-    montant_utilise = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Montant utilisé")
-    montant_restant = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Montant restant")
-    
+
+    montant_prevu = models.DecimalField(
+        max_digits=15, decimal_places=2, verbose_name="Montant prévu")
+    montant_utilise = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Montant utilisé")
+    montant_restant = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name="Montant restant")
+
     notes = models.TextField(blank=True, verbose_name="Notes")
 
     class Meta:
@@ -517,7 +687,6 @@ class BudgetLigne(models.Model):
     def save(self, *args, **kwargs):
         self.montant_restant = self.montant_prevu - self.montant_utilise
         super().save(*args, **kwargs)
-        # Mettre à jour le budget
         self.budget.update_utilise()
 
 
@@ -533,6 +702,9 @@ class RapportFinancier(models.Model):
         ('budget', 'Suivi budgétaire'),
         ('ventes', 'Rapport de ventes'),
         ('depenses', 'Rapport de dépenses'),
+        ('achats', 'Rapport d\'achats'),
+        ('client', 'Rapport client'),
+        ('fournisseur', 'Rapport fournisseur'),
     )
 
     FORMAT_CHOICES = (
@@ -541,23 +713,28 @@ class RapportFinancier(models.Model):
         ('csv', 'CSV'),
     )
 
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
+    type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, verbose_name="Type")
     nom = models.CharField(max_length=200, verbose_name="Nom du rapport")
-    
+
     date_debut = models.DateField(verbose_name="Date début")
     date_fin = models.DateField(verbose_name="Date fin")
-    
-    format = models.CharField(max_length=10, choices=FORMAT_CHOICES, default='pdf', verbose_name="Format")
-    
+
+    format = models.CharField(
+        max_length=10, choices=FORMAT_CHOICES, default='pdf', verbose_name="Format")
+
     # Contenu du rapport (stocké en JSON)
-    contenu = models.JSONField(default=dict, blank=True, verbose_name="Contenu")
-    
+    contenu = models.JSONField(
+        default=dict, blank=True, verbose_name="Contenu")
+
     # Fichier généré
-    fichier = models.FileField(upload_to='rapports/', null=True, blank=True, verbose_name="Fichier")
-    
+    fichier = models.FileField(
+        upload_to='rapports/', null=True, blank=True, verbose_name="Fichier")
+
     # Métadonnées
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         verbose_name = "Rapport financier"
@@ -574,26 +751,33 @@ class ConfigurationFinanciere(models.Model):
     Configuration financière de l'entreprise
     """
     # Devise
-    devise = models.CharField(max_length=3, default='XOF', verbose_name="Devise")
-    devise_symbole = models.CharField(max_length=5, default='CFA', verbose_name="Symbole devise")
-    
+    devise = models.CharField(
+        max_length=3, default='XOF', verbose_name="Devise")
+    devise_symbole = models.CharField(
+        max_length=5, default='CFA', verbose_name="Symbole devise")
+
     # Exercice comptable
     exercice_debut = models.DateField(verbose_name="Début de l'exercice")
     exercice_fin = models.DateField(verbose_name="Fin de l'exercice")
-    
+
     # Taxes
-    taxe_default = models.DecimalField(max_digits=5, decimal_places=2, default=18, verbose_name="TVA par défaut (%)")
-    
+    taxe_default = models.DecimalField(
+        max_digits=5, decimal_places=2, default=18, verbose_name="TVA par défaut (%)")
+
     # Arrondi
-    arrondi = models.PositiveIntegerField(default=0, verbose_name="Nombre de décimales")
-    
+    arrondi = models.PositiveIntegerField(
+        default=0, verbose_name="Nombre de décimales")
+
     # Options
-    auto_validation = models.BooleanField(default=False, verbose_name="Validation automatique des écritures")
-    budget_alerte = models.PositiveIntegerField(default=80, verbose_name="Alerte budget (%)")
-    
+    auto_validation = models.BooleanField(
+        default=False, verbose_name="Validation automatique des écritures")
+    budget_alerte = models.PositiveIntegerField(
+        default=80, verbose_name="Alerte budget (%)")
+
     # Métadonnées
     updated_at = models.DateTimeField(auto_now=True)
-    updated_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    updated_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         verbose_name = "Configuration financière"

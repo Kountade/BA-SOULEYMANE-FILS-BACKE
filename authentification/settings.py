@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "produits_stocks",
     "ventes_clients",
     "achats_fournisseurs",
+    "finances",
     "knox",
     "rest_framework",
     "corsheaders",
